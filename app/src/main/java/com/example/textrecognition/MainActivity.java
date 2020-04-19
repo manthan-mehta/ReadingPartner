@@ -9,35 +9,23 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import android.Manifest;
-import android.app.Activity;
 import android.content.ContentValues;
-import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.drawable.BitmapDrawable;
+import android.database.SQLException;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
-import android.util.SparseArray;
-import android.view.Menu;
-import android.view.MenuItem;
-import android.widget.EditText;
+import android.view.View;
 import android.widget.ImageView;
 import android.widget.Toast;
-
-import com.google.android.gms.vision.Frame;
-import com.google.android.gms.vision.text.TextBlock;
-import com.google.android.gms.vision.text.TextRecognizer;
 import com.theartofdev.edmodo.cropper.CropImage;
-import com.theartofdev.edmodo.cropper.CropImageActivity;
 import com.theartofdev.edmodo.cropper.CropImageView;
 
-public class MainActivity extends AppCompatActivity {
-    EditText mResultEt;
-    ImageView mPreview;
 
+public class MainActivity extends AppCompatActivity {
+    ImageView mPreview;
     private static final int CAMERA_REQUEST_CODE = 200;
     private static final int STORAGE_REQUEST_CODE = 400;
     private static final int IMAGEPICK_CAMERA_CODE = 1001;
@@ -47,39 +35,38 @@ public class MainActivity extends AppCompatActivity {
     String storagePermission[];
     Uri image_uri;
 
+    static DatabaseHelper databaseHelper;
+    static Boolean databaseOpened = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
+        System.setProperty("org.xml.sax.driver","org.xmlpull.v1.sax2.Driver");
         ActionBar actionBar = getSupportActionBar();
-        actionBar.setSubtitle("Click + button to add image");
-
-        mResultEt = (EditText)findViewById(R.id.resultEt);
-        mPreview = (ImageView)findViewById(R.id.imageIV);
-
+        actionBar.setSubtitle("An App to make your reading Smoother");
+        mPreview = (ImageView)findViewById(R.id.imageView);
         cameraPermission = new String[]{Manifest.permission.CAMERA,Manifest.permission.WRITE_EXTERNAL_STORAGE};
         storagePermission = new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE};
+
+        databaseHelper = new DatabaseHelper(this);
+        if(databaseHelper.checkDatabase()) {
+            openDatabase();
+        } else {
+            LoadDatabaseAsync task = new LoadDatabaseAsync(this);
+            task.execute();
+        }
     }
 
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.menu_main,menu);
-        return true;
-    }
+    protected static void openDatabase() {
+        try {
+            databaseHelper.openDatabase();
+            databaseOpened = true;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
 
-    @Override
-    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
-        int id = item.getItemId();
-        if(id == R.id.addImage)
-        {
-            showimportDialog();
-        }
-        else if(id == R.id.setting)
-        {
-            Toast.makeText(this,"Settings",Toast.LENGTH_LONG).show();
-        }
-        return super.onOptionsItemSelected(item);
     }
 
     private void showimportDialog() {
@@ -133,26 +120,11 @@ public class MainActivity extends AppCompatActivity {
             CropImage.ActivityResult activityResult = CropImage.getActivityResult(data);
             if(resultCode == RESULT_OK) {
                 Uri resultUri = activityResult.getUri();
-                mPreview.setImageURI(resultUri);
+                String resulturi_string = resultUri.toString();
 
-                BitmapDrawable bitmapDrawable = (BitmapDrawable) mPreview.getDrawable();
-                Bitmap bmp = bitmapDrawable.getBitmap();
-                TextRecognizer textRecognizer = new TextRecognizer.Builder(getApplicationContext()).build();
-
-                if (!textRecognizer.isOperational()) {
-                    Toast.makeText(this, "Error", Toast.LENGTH_LONG).show();
-                } else {
-                    Frame frame = new Frame.Builder().setBitmap(bmp).build();
-                    SparseArray<TextBlock> items = textRecognizer.detect(frame);
-                    StringBuilder sb = new StringBuilder();
-
-                    for (int i = 0; i < items.size(); i++) {
-                        TextBlock tb = items.valueAt(i);
-                        sb.append(tb.getValue());
-                        sb.append("\n");
-                    }
-                    mResultEt.setText(sb.toString());
-                }
+                Intent intent = new Intent(MainActivity.this,nlp_required.class);
+                intent.putExtra("KEY",resulturi_string);
+                startActivity(intent);
             }
             else if(resultCode == CropImage.CROP_IMAGE_ACTIVITY_RESULT_ERROR_CODE)
             {
@@ -230,5 +202,9 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
         }
+    }
+
+    public void onAddImage(View view) {
+        showimportDialog();
     }
 }
