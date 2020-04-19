@@ -4,15 +4,19 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.app.AlertDialog;
+import android.content.Context;
 import android.content.res.AssetManager;
 import android.database.Cursor;
 import android.database.SQLException;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.SparseArray;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -39,8 +43,8 @@ public class nlp_required extends AppCompatActivity {
     ImageView mPreview_new;
     static ArrayList<String> words,definitions;
     static DatabaseHelper databaseHelper;
-
     RecyclerView recyclerView ;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -55,11 +59,7 @@ public class nlp_required extends AppCompatActivity {
 
         words = new ArrayList<String>();
         definitions = new ArrayList<String>();
-        String result = donlp(resulturi);
-
-        RecyclerViewAdapter viewAdapter = new RecyclerViewAdapter(this,words,definitions);
-        recyclerView.setAdapter(viewAdapter);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        donlp(resulturi);
     }
 
     private String donlp(Uri resulturi) {
@@ -129,27 +129,16 @@ public class nlp_required extends AppCompatActivity {
                     "where's", "who's", "why's", "would"};
             HashSet<String> required_set = new HashSet<>(Arrays.asList(required_tags));
             HashSet<String> stop_Words_set = new HashSet<>(Arrays.asList(stop_wors));
-            databaseHelper = new DatabaseHelper(this);
-            try{
-                databaseHelper.openDatabase();
-            } catch (SQLException e) {
-                throw e;
-            }
+            ArrayList<String> inputwords = new ArrayList<String>();
             for (int i = 0; i < tokens.length; i++) {
                 Log.e("Er:" ,tokens[i]);
                 if (required_set.contains(tags[i]) && !stop_Words_set.contains(tokens[i])) {
-                    Cursor cursor = databaseHelper.getMeaning(tokens[i]);
-                    if(cursor.moveToFirst()) {
-                        String definitions1 = cursor.getString(cursor.getColumnIndex("definition"));
-                        String input_word = cursor.getString(cursor.getColumnIndex("word"));
-                        sb1.append(input_word + "::" + definitions1);
-                        words.add(input_word);
-                        definitions.add(definitions1);
-                        sb1.append("\n");
-                    }
+                    inputwords.add(tokens[i]);
                 }
             }
 
+            FetchMeaningAsync fetchMeaningAsync = new FetchMeaningAsync(this);
+            fetchMeaningAsync.execute(inputwords);
             String result = sb1.toString();
             return result;
         }
@@ -175,5 +164,63 @@ public class nlp_required extends AppCompatActivity {
             }
         }
         return "There is nothing to Show";
+    }
+
+    public class FetchMeaningAsync extends AsyncTask<ArrayList<String>,Void,ArrayList<ArrayList<String>>> {
+
+        private Context context;
+        private DatabaseHelper databaseHelper;
+        AlertDialog alertDialog;
+
+        public FetchMeaningAsync(Context c)
+        {
+            this.context = c;
+        }
+
+        @Override
+        protected ArrayList<ArrayList<String>> doInBackground(ArrayList<String>... arrayLists) {
+            databaseHelper = new DatabaseHelper(context);
+            try{
+                databaseHelper.openDatabase();
+            } catch (SQLException e) {
+                throw e;
+            }
+            ArrayList<String> input_words = arrayLists[0];
+            ArrayList<ArrayList<String>> result ;
+            for(int i=0;i<input_words.size();i++) {
+                Cursor c = databaseHelper.getMeaning(input_words.get(i));
+                if(c.moveToFirst()) {
+                    String definitions1 = c.getString(c.getColumnIndex("definition"));
+                    String input_word = c.getString(c.getColumnIndex("word"));
+                    words.add(input_word);
+                    definitions.add(definitions1);
+                }
+            }
+            return null;
+        }
+
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+
+            android.app.AlertDialog.Builder d = new android.app.AlertDialog.Builder(context,R.style.myTheme);
+            LayoutInflater inflater = LayoutInflater.from(context);
+            View dialogView = inflater.inflate(R.layout.alert_dialog_database,null);
+            d.setTitle("Loading Words and Definitions...");
+            d.setView(dialogView);
+            alertDialog = d.create();
+            alertDialog.setCancelable(false);
+            alertDialog.show();
+
+        }
+
+        @Override
+        protected void onPostExecute(ArrayList<ArrayList<String>> arrayLists) {
+            super.onPostExecute(arrayLists);
+            alertDialog.dismiss();
+            RecyclerViewAdapter viewAdapter = new RecyclerViewAdapter(context,words,definitions);
+            recyclerView.setAdapter(viewAdapter);
+            recyclerView.setLayoutManager(new LinearLayoutManager(context));
+        }
     }
 }
