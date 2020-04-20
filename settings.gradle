@@ -1,2 +1,2 @@
-rootProject.name='TextRecognition'
+rootProject.name='ReadingPartner'
 include ':app'
